@@ -1,24 +1,45 @@
 import tkinter as tk
 from tkinter import ttk
+from app import path_manager
 
-def build_ui(root: tk.Tk) -> None:
-	"""Build the main window layout into the given root."""
-	frm = ttk.Frame(root, padding=12)
-	frm.pack(fill='both', expand=True)
 
-	lbl = ttk.Label(frm, text="mod-bisector", font=("Segoe UI", 18))
-	lbl.pack(pady=(10, 8))
+def build_ui(root: tk.Tk) -> tk.StringVar:
+    """Build the main window layout into the given root.
 
-	msg = ttk.Label(frm, text="This is a minimal GUI. Click Quit to exit.")
-	msg.pack(pady=(0, 12))
+    Returns the `StringVar` that holds the selected folder path.
+    """
+    # 상단: 폴더 경로 입력 + 찾아보기
+    top = ttk.Frame(root, padding=(12, 8))
+    top.pack(fill="x")
 
-	btn_frame = ttk.Frame(frm)
-	btn_frame.pack()
+    path_var = tk.StringVar()
 
-	quit_btn = ttk.Button(btn_frame, text="Quit", command=root.destroy)
-	quit_btn.pack()
+    lbl = ttk.Label(top, text="Mods :")
+    lbl.pack(side="left")
 
-if __name__ == "__main__":
-	root = tk.Tk()
-	build_ui(root)
-	root.mainloop()
+    entry = ttk.Entry(top, textvariable=path_var, state="readonly")
+    entry.pack(side="left", padx=8, expand=True, fill="x")
+
+    browse_btn = ttk.Button(
+        top,
+        text="찾아보기...",
+        command=lambda: (path_var.set(p) if (p := path_manager.browse_directory(root)) else None),
+    )
+    browse_btn.pack(side="left")
+
+    # 본문 자리 (추후 컴포넌트 추가)
+    content = ttk.Frame(root, padding=12)
+    content.pack(fill="both", expand=True)
+
+    placeholder = ttk.Label(content, text="여기에 UI를 구성하세요.")
+    placeholder.pack()
+
+    # 초기값 설정 (저장된 경로가 있으면 불러오기)
+    try:
+        last = path_manager.load_last_path()
+        if last:
+            path_var.set(last)
+    except Exception:
+        pass
+
+    return path_var

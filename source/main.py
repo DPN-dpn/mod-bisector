@@ -6,7 +6,7 @@ from ui import layout
 def main():
     root = tk.Tk()
     root.title("mod-bisector")
-    root.geometry("480x240")
+    root.geometry("560x360")
     layout.build_ui(root)
     root.mainloop()
 
