@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
-from app import path_manager, user_settings_backup
+from app import path_manager
 
 
 def build_ui(root: tk.Tk) -> tk.StringVar:
@@ -23,7 +23,9 @@ def build_ui(root: tk.Tk) -> tk.StringVar:
     browse_btn = ttk.Button(
         top,
         text="찾아보기...",
-        command=lambda: (path_var.set(p) if (p := path_manager.browse_directory(root)) else None),
+        command=lambda: (
+            path_var.set(p) if (p := path_manager.browse_directory(root)) else None
+        ),
     )
     browse_btn.pack(side="left")
 
@@ -31,15 +33,12 @@ def build_ui(root: tk.Tk) -> tk.StringVar:
     content = ttk.Frame(root, padding=12)
     content.pack(fill="both", expand=True)
 
-    # 설정 백업/불러오기 버튼 그룹
-    backup_frame = ttk.LabelFrame(content, text="설정 백업/불러오기", padding=(8, 8))
-    backup_frame.pack(fill="x", pady=0)
+    # 작업 버튼
+    btn_find_hash = ttk.Button(content, text="중복 해시 찾기", command=lambda: None)
+    btn_find_hash.pack(fill="x", pady=(8, 6), ipady=8)
 
-    btn_backup = ttk.Button(backup_frame, text="백업", command=user_settings_backup.backup_settings)
-    btn_load = ttk.Button(backup_frame, text="불러오기", command=user_settings_backup.load_settings)
-
-    btn_backup.pack(side="left", padx=(0, 8))
-    btn_load.pack(side="left")
+    btn_binary_search = ttk.Button(content, text="모드 이진 탐색", command=lambda: None)
+    btn_binary_search.pack(fill="x", pady=(0, 8), ipady=8)
 
     # 초기값 설정 (저장된 경로가 있으면 불러오기)
     try:
@@ -50,4 +49,3 @@ def build_ui(root: tk.Tk) -> tk.StringVar:
         pass
 
     return path_var
-
