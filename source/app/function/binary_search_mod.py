@@ -12,15 +12,11 @@ This file is a cleaned-up, more readable refactor of the original
 implementation while preserving behavior.
 """
 
-from __future__ import annotations
-
 import argparse
-import atexit
 import json
 import os
-import signal
 import sys
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set
 
 
 DISABLED_PREFIX = "DISABLED "
@@ -50,8 +46,12 @@ def disable_folder(path: str) -> str:
     if _is_disabled_name(name):
         return path
     new_path = _disabled_name_for(path)
-    os.rename(path, new_path)
-    return new_path
+    # try rename with retry/skip/abort UI if it fails
+    ok = _rename_with_retry(path, new_path)
+    if ok:
+        return new_path
+    # skipped or failed -> return original path unchanged
+    return path
 
 
 def enable_folder(disabled_path: str) -> str:
@@ -65,8 +65,42 @@ def enable_folder(disabled_path: str) -> str:
     parent = os.path.dirname(disabled_path)
     orig_name = name[len(DISABLED_PREFIX) :]
     new_path = os.path.join(parent, orig_name)
-    os.rename(disabled_path, new_path)
-    return new_path
+    ok = _rename_with_retry(disabled_path, new_path)
+    if ok:
+        return new_path
+    return disabled_path
+
+
+def _rename_with_retry(src: str, dst: str) -> bool:
+    """Attempt to rename `src` -> `dst`.
+
+    On failure, prompt the user to: 다시시도(R), 건너뛰기(S), 중단(A).
+    Returns True if rename succeeded, False if user skipped.
+    Raises an exception if the user chooses to abort or if an unexpected
+    exception occurs and the user selects abort.
+    """
+    while True:
+        try:
+            os.rename(src, dst)
+            return True
+        except Exception as e:
+            print(f"폴더 이름을 바꾸는 동안 오류가 발생했습니다: {src}")
+            print(f"오류: {e}")
+            resp = input("[R] 다시시도, [S] 건너뛰기, [A] 중단 중 선택: ").strip().lower()
+            if not resp:
+                continue
+            c = resp[0]
+            if c == "r":
+                # retry loop
+                continue
+            if c == "s":
+                print("건너뛰고 계속합니다.")
+                return False
+            if c == "a":
+                print("작업을 중단합니다.")
+                raise RuntimeError("사용자 요청으로 작업 중단됨")
+            # unknown input -> re-prompt
+            print("유효한 선택이 아닙니다. R, S, A 중에서 선택하세요.")
 
 
 def find_mod_folders(start_path: Optional[str]) -> List[Dict[str, str]]:
@@ -167,10 +201,12 @@ def run_bisection(start_path: str) -> None:
     def ensure_disabled(orig: str) -> None:
         if os.path.exists(orig):
             disabled = disable_folder(orig)
-            program_disabled.append(disabled)
-            # persist runtime-disabled list if requested
-            if STATE_FILE:
-                _save_state()
+            # only record when we actually renamed to a DISABLED name
+            if _is_disabled_name(os.path.basename(disabled)) and os.path.exists(disabled):
+                program_disabled.append(disabled)
+                # persist runtime-disabled list if requested
+                if STATE_FILE:
+                    _save_state()
 
     def ensure_enabled_if_recorded(orig: str) -> None:
         # If we previously disabled this orig during this run, re-enable it.
@@ -180,8 +216,9 @@ def run_bisection(start_path: str) -> None:
             and os.path.exists(d)
             and _is_disabled_name(os.path.basename(d))
         ):
-            enable_folder(d)
-            if d in program_disabled:
+            newp = enable_folder(d)
+            # if original disabled path no longer exists, enable succeeded
+            if not os.path.exists(d) and d in program_disabled:
                 program_disabled.remove(d)
 
     def set_active_group(group: List[str]) -> None:
