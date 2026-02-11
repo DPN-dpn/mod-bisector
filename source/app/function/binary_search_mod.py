@@ -16,6 +16,7 @@ import argparse
 import json
 import os
 import sys
+import threading
 from typing import Dict, List, Optional, Set
 
 
@@ -25,6 +26,18 @@ DISABLED_PREFIX = "DISABLED "
 program_disabled: List[str] = []
 # optional path where runtime-disabled entries are saved so recovery is possible
 STATE_FILE: Optional[str] = None
+
+# Optional threading.Event set by callers to request an early stop of the
+# bisection run. When set the run will exit as soon as it notices the flag.
+STOP_EVENT: Optional[threading.Event] = None
+
+# Ask function used for interactive prompts. Can be overridden by callers
+# (e.g., UI code) to provide GUI dialogs instead of console input.
+ASK_FN = input
+# Optional callback used to report the final found mode (string). If set,
+# it will be called with the final on-disk path; otherwise the program
+# prints to stdout as before.
+RESULT_FN = None
 
 
 def _is_disabled_name(name: str) -> bool:
@@ -80,13 +93,15 @@ def _rename_with_retry(src: str, dst: str) -> bool:
     exception occurs and the user selects abort.
     """
     while True:
+        if STOP_EVENT and STOP_EVENT.is_set():
+            raise RuntimeError("사용자 요청으로 탐색 중단됨")
         try:
             os.rename(src, dst)
             return True
         except Exception as e:
             print(f"폴더 이름을 바꾸는 동안 오류가 발생했습니다: {src}")
             print(f"오류: {e}")
-            resp = input("[R] 다시시도, [S] 건너뛰기, [A] 중단 중 선택: ").strip().lower()
+            resp = ASK_FN("[R] 다시시도, [S] 건너뛰기, [A] 중단 중 선택: ").strip().lower()
             if not resp:
                 continue
             c = resp[0]
@@ -240,6 +255,9 @@ def run_bisection(start_path: str) -> None:
     current = candidates.copy()
     try:
         while len(current) > 1:
+            if STOP_EVENT and STOP_EVENT.is_set():
+                print("사용자가 탐색을 중단했습니다.")
+                break
             mid = len(current) // 2
             first = current[:mid]
             second = current[mid:]
@@ -269,12 +287,15 @@ def run_bisection(start_path: str) -> None:
                 print("(없음)")
 
             resp = (
-                input(
+                ASK_FN(
                     "이 상태에서 문제(또는 원하는 결과)가 발생합니까? (Y=예, N=아니오): "
                 )
                 .strip()
                 .lower()
             )
+            if resp == "a":
+                # user requested abort
+                raise RuntimeError("사용자 요청으로 탐색 중단됨")
             if resp == "y":
                 # problem occurs when first half alone is enabled => culprit in first
                 current = first
@@ -286,14 +307,22 @@ def run_bisection(start_path: str) -> None:
 
         # Print result if single candidate remains
         if len(current) == 1:
-            # print on-disk path (it may be disabled name or original depending on state)
+            # determine on-disk path (it may be disabled name or original depending on state)
             on_disk = _disabled_name_for(current[0])
             if os.path.exists(current[0]):
-                print(current[0])
+                final = current[0]
             elif os.path.exists(on_disk):
-                print(on_disk)
+                final = on_disk
             else:
-                print(current[0])
+                final = current[0]
+            # Report via RESULT_FN if provided (GUI), else print
+            if RESULT_FN:
+                try:
+                    RESULT_FN(final)
+                except Exception:
+                    print(final)
+            else:
+                print(final)
         else:
             print("검색이 종료되었습니다.")
 
@@ -301,7 +330,8 @@ def run_bisection(start_path: str) -> None:
         # If a state file was provided, use it to recover (enable) entries
         # we persisted during the run. If no state file is set, there is
         # nothing to recover here.
-        if STATE_FILE:
+        if STATE_FILE and not (STOP_EVENT and STOP_EVENT.is_set()):
+            # Only auto-recover when the run was not aborted by the user.
             recover_from_state(STATE_FILE)
 
 

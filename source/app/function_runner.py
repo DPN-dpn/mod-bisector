@@ -6,6 +6,7 @@ from typing import Dict, List
 import os
 import sys
 import subprocess
+import threading
 
 
 def find_hash_results(path: str, hash_str: str) -> List[Dict[str, str]]:
@@ -61,3 +62,43 @@ def recover_state(state_file: str) -> int:
     from app.function.binary_search_mod import recover_from_state
 
     return recover_from_state(state_file)
+
+
+def run_binary_search_gui(path: str, state_file: str, ask_fn, result_fn=None, stop_event=None) -> threading.Thread:
+    """Run binary search in a background thread, using `ask_fn` for prompts.
+
+    `ask_fn` should be a callable that accepts a prompt string and returns
+    the user's response string. `result_fn`, if provided, will be used to
+    receive the final found mode string. The returned `Thread` is started
+    and returned to the caller.
+    """
+    def target():
+        # import here to ensure module is fresh and available
+        import app.function.binary_search_mod as mod
+
+        # set module-level state file and ask function
+        mod.STATE_FILE = state_file
+        mod.ASK_FN = ask_fn
+        # set optional result callback
+        mod.RESULT_FN = result_fn
+        # set optional stop event to allow early termination
+        mod.STOP_EVENT = stop_event
+        try:
+            mod.run_bisection(path)
+        except RuntimeError as e:
+            # If user requested abort inside the bisection, suppress traceback.
+            if "사용자 요청" in str(e) or "중단" in str(e):
+                # silent abort
+                pass
+            else:
+                print(f"binary search error: {e}", file=sys.stderr)
+        except Exception as e:
+            # avoid unhandled exception printing a full traceback from thread
+            print(f"binary search unexpected error: {e}", file=sys.stderr)
+        finally:
+            # leave STATE_FILE/ASK_FN/RESULT_FN as-is; caller may remove state file
+            pass
+
+    t = threading.Thread(target=target, daemon=True)
+    t.start()
+    return t
