@@ -11,7 +11,7 @@ from app.function_runner import (
     run_binary_search_gui,
     recover_state,
 )
-from .dialogs import make_ask_fn, show_text_window
+from .dialogs import make_ask_fn, show_text_window, select_exclusions
 
 
 def build_ui(root: tk.Tk) -> tk.StringVar:
@@ -130,6 +130,18 @@ def build_ui(root: tk.Tk) -> tk.StringVar:
         stop_ev = threading.Event()
         ask_fn = make_ask_fn(root, stop_ev)
 
+        # present folder-tree exclusions dialog (shows entire folder tree)
+        exclude_paths = []
+        try:
+            res = select_exclusions(root, p)
+            if res is None:
+                # user cancelled selection -> abort starting binary search
+                messagebox.showinfo("취소", "이진탐색이 취소되었습니다.")
+                return
+            exclude_paths = res
+        except Exception:
+            exclude_paths = []
+
         def result_fn(result_str: str) -> None:
             root.after(
                 0,
@@ -139,7 +151,7 @@ def build_ui(root: tk.Tk) -> tk.StringVar:
             )
 
         try:
-            t = run_binary_search_gui(p, state_file, ask_fn, result_fn, stop_ev)
+            t = run_binary_search_gui(p, state_file, ask_fn, result_fn, stop_ev, exclude_paths)
 
             def _poll_thread():
                 try:

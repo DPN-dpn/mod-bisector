@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 import threading
+import os
 from typing import Callable
 
 
@@ -87,3 +88,105 @@ def make_ask_fn(root: tk.Tk, stop_ev: threading.Event) -> Callable[[str], str]:
                 return "a"
 
     return ask_fn
+
+
+def select_exclusions(root: tk.Tk, base_path: str) -> list:
+    """Show a modal dialog that displays folder tree under `base_path`.
+
+    The user can multi-select folders to exclude. Returns a list of
+    absolute paths to the selected folders, or `None` if cancelled.
+    """
+    if not base_path or not os.path.isdir(base_path):
+        return None
+
+    # collect directories under base_path (include base_path itself)
+    dirs = []
+    try:
+        for root_dir, subdirs, _ in os.walk(base_path):
+            dirs.append(root_dir)
+    except Exception:
+        return None
+
+    sel = None
+    top = tk.Toplevel(root)
+    top.title("제외할 폴더 선택")
+    top.transient(root)
+    top.grab_set()
+
+    # position dialog at main window's current location
+    try:
+        root.update_idletasks()
+        rx = root.winfo_rootx()
+        ry = root.winfo_rooty()
+        top.update_idletasks()
+        top.geometry(f"+{rx}+{ry}")
+    except Exception:
+        pass
+
+    lbl = ttk.Label(top, text="이진탐색에서 제외할 폴더들을 선택하세요:")
+    lbl.pack(padx=12, pady=(12, 6))
+
+    # Treeview to show folder hierarchy
+    tree = ttk.Treeview(top, show="tree")
+    tree.pack(padx=12, pady=6, fill="both", expand=True)
+
+    # map absolute path -> tree item id
+    nodes = {}
+    # checkbox state map: abs path -> bool
+    checked = {}
+
+    def add_node(path_abs: str):
+        parent = os.path.dirname(path_abs)
+        parent_id = nodes.get(parent, "")
+        name = os.path.basename(path_abs) or path_abs
+        # display with checkbox glyph (unchecked by default)
+        txt = f"☐ {name}"
+        iid = path_abs
+        tree.insert(parent_id, "end", iid=iid, text=txt)
+        nodes[path_abs] = iid
+        checked[path_abs] = False
+
+    # ensure stable ordering
+    dirs_sorted = sorted(dirs, key=lambda p: p.count(os.sep))
+    for d in dirs_sorted:
+        add_node(d)
+
+    # clicking a row toggles its checkbox state
+    def _on_click(event):
+        item = tree.identify_row(event.y)
+        if not item:
+            return
+        # toggle this item
+        try:
+            cur = checked.get(item, False)
+            new = not cur
+            checked[item] = new
+            # update display text for this item
+            name = os.path.basename(item) or item
+            glyph = "☑" if new else "☐"
+            tree.item(item, text=f"{glyph} {name}")
+        except Exception:
+            pass
+
+    tree.bind("<Button-1>", _on_click)
+
+    btn_frame = ttk.Frame(top)
+    btn_frame.pack(pady=(6, 12))
+
+    def on_ok():
+        nonlocal sel
+        sel = [p for p, v in checked.items() if v]
+        top.grab_release()
+        top.destroy()
+
+    def on_cancel():
+        nonlocal sel
+        sel = None
+        top.grab_release()
+        top.destroy()
+
+    ttk.Button(btn_frame, text="확인", command=on_ok).pack(side="left", padx=6)
+    ttk.Button(btn_frame, text="취소", command=on_cancel).pack(side="left", padx=6)
+
+    root.wait_window(top)
+    return sel

@@ -31,6 +31,9 @@ STATE_FILE: Optional[str] = None
 # bisection run. When set the run will exit as soon as it notices the flag.
 STOP_EVENT: Optional[threading.Event] = None
 
+# Optional list of on-disk paths to exclude from the bisection
+EXCLUDE_PATHS: List[str] = []
+
 # Ask function used for interactive prompts. Can be overridden by callers
 # (e.g., UI code) to provide GUI dialogs instead of console input.
 ASK_FN = input
@@ -247,7 +250,8 @@ def run_bisection(start_path: str) -> None:
         print(f"- {m.get('name')}: {m.get('path')}")
 
     # Build candidate list (original, unprefixed paths). Do not include
-    # items already prefixed with DISABLED at program start.
+    # items already prefixed with DISABLED at program start. Also skip
+    # any paths requested to be excluded via EXCLUDE_PATHS.
     candidates: List[str] = []
     original_disabled_on_disk: Set[str] = set()
     for m in mods:
@@ -256,6 +260,21 @@ def run_bisection(start_path: str) -> None:
         if _is_disabled_name(name):
             original_disabled_on_disk.add(disk_path)
         else:
+            # skip if in EXCLUDE_PATHS or under any excluded folder
+            def _is_under_excluded(p: str) -> bool:
+                try:
+                    for ex in EXCLUDE_PATHS:
+                        if not ex:
+                            continue
+                        ex_a = os.path.abspath(ex)
+                        if p == ex_a or p.startswith(ex_a + os.sep):
+                            return True
+                except Exception:
+                    pass
+                return False
+
+            if _is_under_excluded(disk_path):
+                continue
             candidates.append(disk_path)
 
     if not candidates:

@@ -75,7 +75,7 @@ def recover_state(path: str, state_file: str) -> int:
 
 
 def run_binary_search_gui(
-    path: str, state_file: str, ask_fn, result_fn=None, stop_event=None
+    path: str, state_file: str, ask_fn, result_fn=None, stop_event=None, exclude_paths=None
 ) -> threading.Thread:
     """Run binary search in a background thread, using `ask_fn` for prompts.
 
@@ -97,6 +97,11 @@ def run_binary_search_gui(
         mod.RESULT_FN = result_fn
         # set optional stop event to allow early termination
         mod.STOP_EVENT = stop_event
+        # set excluded paths (if any)
+        try:
+            mod.EXCLUDE_PATHS = list(exclude_paths) if exclude_paths else []
+        except Exception:
+            mod.EXCLUDE_PATHS = []
         try:
             mod.run_bisection(path)
         except RuntimeError as e:
