@@ -30,6 +30,9 @@ xxmi 모드 사용 중 오류가 발생했을 때 범인이 되는 모드를 찾
 ### 3-3. 마지막 남은 모드 출력
 <img width="388" height="152" alt="7" src="https://github.com/user-attachments/assets/f2e945ef-ec13-41a1-b1c0-0eaab2058333" />
 
+### 3-A. 이진 탐색 중 종료됐을 경우 '복원'버튼을 통해 모드 설정 되돌리기
+<img width="562" height="247" alt="8" src="https://github.com/user-attachments/assets/1da54bc7-c834-44c1-9816-9dbb635fb7c8" />
+
 
 # 라이센스
 This project is licensed under the [MIT License](LICENSE).
